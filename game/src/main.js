@@ -11,6 +11,7 @@ import { RingCourse } from './rings.js';
 import { SORTIES, SPAWN, scoreSortie } from './missions.js';
 import { Hud } from './hud.js';
 import { SoundEngine } from './audio.js';
+import { Traffic } from './traffic.js';
 import { poseForShot } from './shots.js';
 
 const canvas = document.getElementById('scene');
@@ -22,6 +23,7 @@ const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 9000);
 buildWorld(scene);
 const aircraft = buildAircraft();
 scene.add(aircraft.group);
+const traffic = new Traffic(scene);
 
 const input = new Input();
 const hud = new Hud();
@@ -61,6 +63,10 @@ function startSortie(index) {
     timeSec: 0,
     airborne: false,
     landed: false,
+    streak: 0, // rings cleared inside the streak window
+    streakTimer: 0, // seconds left in the window
+    streakBest: 0,
+    streakBonus: 0, // points banked by streaks
     prevPos: { ...flight.pos },
     stallWarnedAt: -9,
     startWall: performance.now(),
@@ -80,6 +86,8 @@ function endSortie(crashed) {
     timeSec: run.timeSec,
     fuelLeft: run.fuel,
     hull: run.hull,
+    streakBonus: run.streakBonus,
+    streakBest: run.streakBest,
   };
   const score = scoreSortie(sortie, result);
   document.getElementById('debrief-title').textContent = crashed
@@ -87,6 +95,7 @@ function endSortie(crashed) {
     : 'SORTIE COMPLETE';
   const rows = [
     ['Rings', `${result.ringsCleared} of ${course.total} — ${score.ringPoints} pts`],
+    ['Streak', `best ×${result.streakBest} — ${score.streakBonus} pts`],
     ['Time', `${Math.round(result.timeSec)} s — bonus ${score.timeBonus} pts`],
     ['Fuel left', `${Math.round(result.fuelLeft * 100)}% — ${score.fuelBonus} pts`],
     ['Hull', `${Math.round(result.hull * 100)}% — penalty ${score.hullPenalty} pts`],
@@ -161,10 +170,23 @@ function stepFlying(dt, controls) {
     run.timeSec += dt;
   }
 
+  // Ring streaks: clearing a ring opens a 25-second window; clear the
+  // next inside it and the streak grows, banking bonus points — skill
+  // converted into a resource, the way a long drift charges a turbo.
+  if (run.streakTimer > 0) {
+    run.streakTimer -= dt;
+    if (run.streakTimer <= 0) run.streak = 0;
+  }
   const pass = course.check(flight, run.prevPos);
   if (pass === 'cleared') {
+    run.streak = run.streakTimer > 0 ? run.streak + 1 : 1;
+    run.streakTimer = 25;
+    run.streakBest = Math.max(run.streakBest, run.streak);
+    run.streakBonus += 30 * (run.streak - 1);
     sound.ringCleared();
-    hud.message(course.done ? 'Final ring!' : `Ring ${course.clearedCount} cleared`, 1.6);
+    if (course.done) hud.message('Final ring!', 1.6);
+    else if (run.streak >= 2) hud.message(`STREAK ×${run.streak} — +${30 * (run.streak - 1)} pts`, 1.6);
+    else hud.message(`Ring ${course.clearedCount} cleared`, 1.6);
   }
 
   if (flight.stalled && elapsed - run.stallWarnedAt > 4) {
@@ -248,7 +270,7 @@ resize();
 if (shotMode) {
   titleScreen.classList.add('hidden');
   hud.show();
-  const shot = poseForShot(shotMode, { flight, aircraft, camera, camPos, startSortie, getCourse: () => course });
+  const shot = poseForShot(shotMode, { flight, aircraft, camera, camPos, startSortie, getCourse: () => course, traffic });
   if (shot) {
     state = 'flying';
     course.refreshColours(1);
@@ -259,11 +281,11 @@ if (shotMode) {
 }
 
 // A small handle for automated play-testing (harmless in play).
-window.__summitAir = { flight, getState: () => state, getCourse: () => course };
+window.__summitAir = { flight, traffic, getState: () => state, getCourse: () => course, getRun: () => run };
 
 function frame(now) {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, (now - lastTime) / 1000);
+  const dt = Math.max(0, Math.min(0.05, (now - lastTime) / 1000));
   lastTime = now;
   elapsed += dt;
 
@@ -278,13 +300,16 @@ function frame(now) {
   }
   if (state !== 'title') {
     poseAircraft(aircraft, flight, controls, dt, elapsed);
+    traffic.update(dt, elapsed);
     if (course) course.refreshColours(elapsed);
     updateCamera(dt);
     if (state === 'flying') hud.update(dt, flight, sortie, course, run);
-    sound.update(flight);
+    sound.update(flight, dt);
   } else {
-    // Title: the plane waits on the runway under a slow orbit.
+    // Title: the plane waits on the runway under a slow orbit, and the
+    // traffic plane keeps flying its circuit behind the menu.
     poseAircraft(aircraft, flight, { pitch: 0, roll: 0, rudder: 0 }, dt, elapsed);
+    traffic.update(dt, elapsed);
     updateCamera(dt);
   }
   renderer.render(scene, camera);

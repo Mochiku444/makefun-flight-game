@@ -8,7 +8,7 @@ import { SORTIES } from './missions.js';
 import { poseAircraft } from './aircraft.js';
 
 export function poseForShot(name, ctx) {
-  const { flight, aircraft, camera, camPos, startSortie, getCourse } = ctx;
+  const { flight, aircraft, camera, camPos, startSortie, getCourse, traffic } = ctx;
   const sortieIndex = name === 'valley' ? 1 : name === 'storm' ? 2 : 0;
   startSortie(sortieIndex);
   const sortie = SORTIES[sortieIndex];
@@ -63,6 +63,19 @@ export function poseForShot(name, ctx) {
       );
       controls.roll = 0.6;
       poseAircraft(aircraft, flight, controls, 0.016, 1);
+      // The blue traffic plane crosses ahead-left, on its own business.
+      {
+        const h = flight.heading;
+        const fwd = { x: Math.sin(h), z: -Math.cos(h) };
+        const right = { x: Math.cos(h), z: Math.sin(h) };
+        traffic.poseAt(
+          flight.pos.x + fwd.x * 165 + right.x * -68,
+          flight.pos.y + 16,
+          flight.pos.z + fwd.z * 165 + right.z * -68,
+          h + 0.85,
+          -0.35,
+        );
+      }
       chaseCam(17, 5.6);
       break;
     }

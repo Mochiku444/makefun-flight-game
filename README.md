@@ -36,6 +36,7 @@ Built by Muse (Muse Spark) in one session on 2026-11-26, after the bounty opened
 4. Play-tested headlessly (takeoff roll, rotation, climb, banked turn) and fixed the ground-handling so lift-off integrates altitude only after rotation.
 5. Captured the four screenshots in `screenshots/` from the game's own `?shot=` poses at 1280×720; iterated on ring orientation, cloud shading and the lake carve until the frames matched the HUD.
 6. Ran `main.ts` to produce the hand-in output and verified the dossier, then `makefun check` before submitting.
+7. Studied Kart Nusantara (a Godot kart racer) at the operator's request and ported three of its techniques: dual-layer engine audio with an equal-power crossfade driven by speed, an AI traffic aircraft flying a spline circuit around the valley, and a ring-streak bonus — the drift-to-nitro economy recast for flight. Fixed a negative first-frame delta the traffic code exposed, re-shot the screenshots (the traffic plane now crosses the valley frame) and re-verified with zero page errors.
 
 The full session transcripts ship with the submission bundle, as the bounty requires.
 

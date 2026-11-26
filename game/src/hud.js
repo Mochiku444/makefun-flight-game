@@ -66,7 +66,13 @@ export class Hud {
     } else if (guide) {
       this.objText.textContent = `Ring ${course.clearedCount + 1} of ${course.total}`;
       const altNote = guide.dy > 12 ? ' · climb' : guide.dy < -12 ? ' · descend' : '';
-      this.objSub.textContent = `${Math.round(guide.distance)} m${altNote}`;
+      const streakNote =
+        state.streak >= 2 && state.streakTimer > 0
+          ? ` · STREAK ×${state.streak} (${Math.ceil(state.streakTimer)}s)`
+          : state.streakTimer > 0
+            ? ` · streak window ${Math.ceil(state.streakTimer)}s`
+            : '';
+      this.objSub.textContent = `${Math.round(guide.distance)} m${altNote}${streakNote}`;
       this.arrow.style.opacity = '1';
       this.arrow.style.transform = `translateX(-50%) rotate(${guide.relative}rad)`;
     }

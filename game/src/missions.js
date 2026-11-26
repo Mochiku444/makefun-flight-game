@@ -75,11 +75,12 @@ export const SORTIES = [
 // bent metal and a dry tank. A sortie only counts when it ends in a landing.
 export function scoreSortie(sortie, result) {
   const ringPoints = result.ringsCleared * 120;
+  const streakBonus = result.streakBonus ?? 0;
   const timeBonus = Math.max(0, Math.round((sortie.timePar - result.timeSec) * 1.5));
   const fuelBonus = Math.round(result.fuelLeft * 220);
   const hullPenalty = Math.round((1 - result.hull) * 300);
-  const total = Math.max(0, ringPoints + timeBonus + fuelBonus - hullPenalty);
-  return { ringPoints, timeBonus, fuelBonus, hullPenalty, total };
+  const total = Math.max(0, ringPoints + streakBonus + timeBonus + fuelBonus - hullPenalty);
+  return { ringPoints, streakBonus, timeBonus, fuelBonus, hullPenalty, total };
 }
 
 export const SPAWN = { x: WORLD.spawn.x, y: 0, z: WORLD.spawn.z, heading: WORLD.spawn.heading };

@@ -2,11 +2,12 @@
 // cream fuselage, sunset-orange wing and tail, a spinning two-blade prop,
 // working control surfaces that deflect with the pilot's input, fixed gear
 // and navigation lights. Built facing north (-Z) to match heading 0.
+// The accent colour is a parameter so traffic can wear a different paint.
 import * as THREE from 'three';
 
-export function buildAircraft() {
+export function buildAircraft(accentHex = 0xe87e2e) {
   const cream = new THREE.MeshLambertMaterial({ color: 0xf2ead8 });
-  const orange = new THREE.MeshLambertMaterial({ color: 0xe87e2e });
+  const orange = new THREE.MeshLambertMaterial({ color: accentHex });
   const dark = new THREE.MeshLambertMaterial({ color: 0x2b2f36 });
   const glass = new THREE.MeshLambertMaterial({ color: 0x274b63, emissive: 0x14324a });
 
