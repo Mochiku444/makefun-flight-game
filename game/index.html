@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Summit Air — 3D Flight Game</title>
+<link rel="stylesheet" href="style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="scene"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="instruments">
+    <div class="gauge"><span class="g-label">ALT</span><span id="g-alt" class="g-value">0</span><span class="g-unit">ft</span></div>
+    <div class="gauge"><span class="g-label">SPD</span><span id="g-spd" class="g-value">0</span><span class="g-unit">kt</span></div>
+    <div class="gauge"><span class="g-label">HDG</span><span id="g-hdg" class="g-value">000</span><span class="g-unit">deg</span></div>
+    <div class="gauge"><span class="g-label">V/S</span><span id="g-vs" class="g-value">0</span><span class="g-unit">fpm</span></div>
+    <canvas id="horizon" width="120" height="120"></canvas>
+  </div>
+
+  <div id="objective">
+    <div id="obj-title">SORTIE 1 — FIRST FLIGHT</div>
+    <div id="obj-text">Throttle up and take off</div>
+    <div id="obj-sub"></div>
+  </div>
+
+  <div id="reticle">+</div>
+  <div id="ring-arrow">▲</div>
+
+  <div id="meters">
+    <div class="meter"><span class="m-label">FUEL</span><div class="m-track"><div id="m-fuel" class="m-fill fuel"></div></div></div>
+    <div class="meter"><span class="m-label">HULL</span><div class="m-track"><div id="m-hull" class="m-fill hull"></div></div></div>
+    <div class="meter"><span class="m-label">THR</span><div class="m-track"><div id="m-thr" class="m-fill thr"></div></div></div>
+  </div>
+
+  <div id="message"></div>
+  <div id="controls-hint">W/S pitch · A/D bank · Shift/Ctrl throttle · Space brakes · C camera · R restart</div>
+</div>
+
+<div id="title-screen">
+  <h1>SUMMIT AIR</h1>
+  <p class="tagline">A 3D flight game over the Kestrel Valley</p>
+  <div id="sortie-list"></div>
+  <p class="press">Press <b>1</b>, <b>2</b> or <b>3</b> to pick a sortie — or click one</p>
+  <p class="fineprint">Keyboard and mouse · sound on first keypress</p>
+</div>
+
+<div id="debrief" class="hidden">
+  <h2 id="debrief-title">SORTIE COMPLETE</h2>
+  <div id="debrief-rows"></div>
+  <p class="press">Press <b>Enter</b> to fly again · <b>Esc</b> for the sortie board</p>
+</div>
+
+<script type="module" src="src/main.js"></script>
+</body>
+</html>
