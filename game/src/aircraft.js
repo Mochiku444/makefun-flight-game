@@ -111,7 +111,77 @@ export function buildAircraft(accentHex = 0xe87e2e) {
   navR.position.set(5.7, 0.92, -1.1);
   plane.add(navR);
 
-  return { group: plane, prop, blur, aileronL, aileronR, elevator, rudder };
+  // Cockpit interior: a lit gauge panel, glareshield and canopy frame,
+  // shown only from the pilot's seat. The gauges are drawn once on a
+  // canvas — dials, needles and a horizon ball — so the panel reads as
+  // flown instruments, not decoration.
+  const cockpit = new THREE.Group();
+  const panelTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = 512; cv.height = 144;
+    const cx = cv.getContext('2d');
+    cx.fillStyle = '#20242a'; cx.fillRect(0, 0, 512, 144);
+    const dial = (x, label, needle, draw) => {
+      cx.beginPath(); cx.arc(x, 62, 40, 0, Math.PI * 2);
+      cx.fillStyle = '#101216'; cx.fill();
+      cx.lineWidth = 3; cx.strokeStyle = '#c8b98a'; cx.stroke();
+      cx.fillStyle = '#9fb4c4'; cx.font = '11px monospace'; cx.textAlign = 'center';
+      for (let t = 0; t < 10; t++) {
+        const a = Math.PI * 0.75 + t * Math.PI * 1.5 / 9;
+        cx.fillRect(x + Math.cos(a) * 33 - 1, 62 + Math.sin(a) * 33 - 1, 2, 2);
+      }
+      if (draw) draw(x);
+      const na = Math.PI * 0.75 + needle * Math.PI * 1.5;
+      cx.beginPath(); cx.moveTo(x, 62);
+      cx.lineTo(x + Math.cos(na) * 30, 62 + Math.sin(na) * 30);
+      cx.lineWidth = 3; cx.strokeStyle = '#ffb347'; cx.stroke();
+      cx.fillStyle = '#e8e2d2'; cx.font = 'bold 12px monospace';
+      cx.fillText(label, x, 122);
+    };
+    dial(58, 'ASI', 0.42);
+    dial(150, 'ALT', 0.18);
+    dial(242, 'HORIZON', 0.5, (x) => {
+      cx.save(); cx.beginPath(); cx.arc(x, 62, 36, 0, Math.PI * 2); cx.clip();
+      cx.fillStyle = '#3f7ec2'; cx.fillRect(x - 36, 26, 72, 36);
+      cx.fillStyle = '#7a5c38'; cx.fillRect(x - 36, 62, 72, 36);
+      cx.restore();
+    });
+    dial(334, 'HDG', 0.0);
+    dial(426, 'VSI', 0.55);
+    dial(486, 'RPM', 0.7);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const panel = new THREE.Mesh(
+    new THREE.BoxGeometry(1.5, 0.62, 0.14),
+    new THREE.MeshLambertMaterial({ color: 0x23272e }),
+  );
+  const gauges = new THREE.Mesh(
+    new THREE.PlaneGeometry(1.44, 0.54),
+    new THREE.MeshBasicMaterial({ map: panelTex }),
+  );
+  gauges.position.set(0, 0, 0.08);
+  const shield = new THREE.Mesh(new THREE.BoxGeometry(1.55, 0.07, 0.3), panel.material);
+  shield.position.set(0, 0.36, -0.05);
+  // The console leans back toward the pilot so its lit face catches the
+  // eye from the seat instead of hiding under the glareshield.
+  const console3 = new THREE.Group();
+  console3.add(panel, gauges, shield);
+  console3.position.set(0, 0.56, -2.62);
+  console3.rotation.x = -0.42;
+  cockpit.add(console3);
+  const pillarGeo = new THREE.BoxGeometry(0.055, 1.0, 0.055);
+  for (const side of [-1, 1]) {
+    const pillar = new THREE.Mesh(pillarGeo, panel.material);
+    pillar.position.set(side * 0.8, 1.2, -2.6);
+    pillar.rotation.z = side * -0.25;
+    cockpit.add(pillar);
+  }
+  cockpit.visible = false;
+  plane.add(cockpit);
+
+  plane.traverse((o) => { if (o.isMesh) o.castShadow = true; });
+  blur.castShadow = false;
+
+  return { group: plane, prop, blur, aileronL, aileronR, elevator, rudder, cockpit, canopy };
 }
 
 // Pose the aircraft from the flight model and animate its moving parts.

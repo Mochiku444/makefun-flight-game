@@ -78,38 +78,119 @@ export function groundAt(x, z) {
 }
 
 // --- scene construction ----------------------------------------------------
+let skyMat = null, cloudMat = null, sunGlow = null, sunLight = null, hemiLight = null, skyMesh = null;
+
+// The sky dome rides with the camera so its far side never crosses the
+// camera's far plane (which clipped it into a black cap on the horizon).
+export function followSky(camera) {
+  if (skyMesh) skyMesh.position.copy(camera.position);
+}
+
+const ATMOSPHERES = {
+  day:    { top: 0x3a6fc4, horizon: 0xdcebf5, fog: 0xcfe0ec, fogNear: 1300, fogFar: 7000, sun: 0xfff1d6, sunI: 2.6, hemi: 0.95, cloud: 0xffffff, cloudO: 0.88, glow: 0.85 },
+  golden: { top: 0x2e4a7a, horizon: 0xffb36b, fog: 0xe8b98a, fogNear: 1100, fogFar: 6800, sun: 0xffc98a, sunI: 2.9, hemi: 0.8, cloud: 0xffe9d0, cloudO: 0.9, glow: 1.0 },
+  storm:  { top: 0x2c3e50, horizon: 0x8799a8, fog: 0x76879a, fogNear: 420, fogFar: 3300, sun: 0xbfd0dd, sunI: 1.15, hemi: 0.5, cloud: 0x8d9aa6, cloudO: 0.96, glow: 0.25 },
+};
+
+export function applyAtmosphere(scene, kind) {
+  const a = ATMOSPHERES[kind] || ATMOSPHERES.day;
+  if (skyMat) {
+    skyMat.uniforms.top.value.set(a.top);
+    skyMat.uniforms.horizon.value.set(a.horizon);
+  }
+  scene.fog.color.set(a.fog);
+  scene.fog.near = a.fogNear;
+  scene.fog.far = a.fogFar;
+  if (sunLight) {
+    sunLight.color.set(a.sun);
+    sunLight.intensity = a.sunI;
+  }
+  if (hemiLight) hemiLight.intensity = a.hemi;
+  if (cloudMat) {
+    cloudMat.color.set(a.cloud);
+    cloudMat.opacity = a.cloudO;
+  }
+  if (sunGlow) sunGlow.material.opacity = a.glow;
+}
+
 export function buildWorld(scene) {
-  scene.background = new THREE.Color(0x87b5d9);
-  scene.fog = new THREE.Fog(0xa8c6de, 900, 5200);
+  scene.fog = new THREE.Fog(0xcfe0ec, 1300, 7000);
+
+  // Gradient sky dome: deep blue overhead melting into a pale horizon.
+  skyMat = new THREE.ShaderMaterial({
+    side: THREE.BackSide, depthWrite: false, fog: false,
+    uniforms: {
+      top: { value: new THREE.Color(0x3a6fc4) },
+      horizon: { value: new THREE.Color(0xdcebf5) },
+    },
+    vertexShader: 'varying vec3 vP; void main(){ vP = position; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+    fragmentShader: 'uniform vec3 top; uniform vec3 horizon; varying vec3 vP;\n' +
+      'void main(){ float t = pow(clamp(normalize(vP).y * 0.5 + 0.5, 0.0, 1.0), 0.72); gl_FragColor = vec4(mix(horizon, top, t), 1.0);\n' +
+      '#include <colorspace_fragment>\n}',
+  });
+  skyMesh = new THREE.Mesh(new THREE.SphereGeometry(6000, 24, 12), skyMat);
+  scene.add(skyMesh);
 
   const sun = new THREE.DirectionalLight(0xfff1d6, 2.6);
   sun.position.set(-1400, 2100, -900);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.camera.left = -430; sun.shadow.camera.right = 430;
+  sun.shadow.camera.top = 430; sun.shadow.camera.bottom = -430;
+  sun.shadow.camera.near = 200; sun.shadow.camera.far = 3200;
+  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 3;
   scene.add(sun);
-  scene.add(new THREE.HemisphereLight(0xbcd7f0, 0x4a6741, 0.95));
+  scene.add(sun.target);
+  sunLight = sun;
+  hemiLight = new THREE.HemisphereLight(0xbcd7f0, 0x4a6741, 0.95);
+  scene.add(hemiLight);
+
+  // Sun glow billboard riding the light's direction.
+  const glowTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const cx = cv.getContext('2d');
+    const gr = cx.createRadialGradient(64, 64, 2, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,244,214,1)');
+    gr.addColorStop(0.35, 'rgba(255,226,160,0.55)');
+    gr.addColorStop(1, 'rgba(255,226,160,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  sunGlow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.85, fog: false, depthWrite: false }));
+  sunGlow.scale.setScalar(1100);
+  sunGlow.position.set(-1400, 2100, -900).normalize().multiplyScalar(4800);
+  scene.add(sunGlow);
 
   buildTerrain(scene);
   buildRunway(scene);
   buildAirfield(scene);
   buildLake(scene);
+  buildRoadAndVillage(scene);
   buildTrees(scene);
   buildClouds(scene);
   return { sun };
 }
 
 function buildTerrain(scene) {
-  const seg = 150;
+  const seg = 190;
   const geo = new THREE.PlaneGeometry(WORLD.size, WORLD.size, seg, seg);
   geo.rotateX(-Math.PI / 2);
   const pos = geo.attributes.position;
   const colours = [];
-  const grass = new THREE.Color(0x5d8a4c), dry = new THREE.Color(0x9aa055);
+  const grass = new THREE.Color(0x55803f), dry = new THREE.Color(0x9aa055);
   const rock = new THREE.Color(0x8b8578), snow = new THREE.Color(0xf4f7f9);
+  // Farmland patchwork: from the air, fields are what make land read as land.
+  const fieldPalette = [0x5d8a42, 0x6f9a52, 0xb3a05e, 0x8a6f4d, 0x4f7a3a].map((h) => new THREE.Color(h));
   const c = new THREE.Color();
   for (let i = 0; i < pos.count; i++) {
     const x = pos.getX(i), z = pos.getZ(i);
     const h = terrainHeight(x, z);
     pos.setY(i, h);
-    if (h < 26) c.copy(grass).lerp(dry, fbm(x * 0.004, z * 0.004, 2));
+    if (h < 26) {
+      const cell = hash(Math.floor(x / 280), Math.floor(z / 280));
+      const field = fieldPalette[Math.floor(cell * fieldPalette.length) % fieldPalette.length];
+      c.copy(field).lerp(grass, 0.25 + fbm(x * 0.004, z * 0.004, 2) * 0.3);
+    }
     else if (h < 150) c.copy(dry).lerp(rock, (h - 26) / 124);
     else if (h < 330) c.copy(rock);
     else c.copy(rock).lerp(snow, Math.min(1, (h - 330) / 160));
@@ -118,7 +199,9 @@ function buildTerrain(scene) {
   geo.setAttribute('color', new THREE.Float32BufferAttribute(colours, 3));
   geo.computeVertexNormals();
   const mat = new THREE.MeshLambertMaterial({ vertexColors: true });
-  scene.add(new THREE.Mesh(geo, mat));
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.receiveShadow = true;
+  scene.add(mesh);
 }
 
 function buildRunway(scene) {
@@ -165,6 +248,7 @@ function buildAirfield(scene) {
   const hangar = new THREE.Group();
   const body = new THREE.Mesh(new THREE.BoxGeometry(64, 20, 44), grey);
   body.position.y = 10;
+  body.castShadow = true; body.receiveShadow = true;
   hangar.add(body);
   const roof = new THREE.Mesh(new THREE.CylinderGeometry(23, 23, 64, 3, 1), rust);
   roof.rotation.z = Math.PI / 2;
@@ -185,6 +269,7 @@ function buildAirfield(scene) {
     new THREE.MeshLambertMaterial({ color: 0x2c4a63, emissive: 0x1c3648 }),
   );
   cab.position.y = 37;
+  cab.castShadow = true;
   tower.add(cab);
   tower.position.set(95, 0, 1180);
   scene.add(tower);
@@ -212,12 +297,55 @@ function buildLake(scene) {
   scene.add(lake);
 }
 
+// A dirt road out of the airfield and a farming village on the lake's west
+// shore: landmarks a pilot (and a screenshot) can navigate by.
+function buildRoadAndVillage(scene) {
+  const dirt = new THREE.MeshLambertMaterial({ color: 0x9a8563, polygonOffset: true, polygonOffsetFactor: -2 });
+  const from = { x: 90, z: 1250 }, to = { x: 1180, z: -1330 };
+  const segs = 26, dx = (to.x - from.x) / segs, dz = (to.z - from.z) / segs;
+  const segLen = Math.hypot(dx, dz);
+  const roadGeo = new THREE.PlaneGeometry(17, segLen + 14);
+  for (let i = 0; i < segs; i++) {
+    const cx = from.x + dx * (i + 0.5), cz = from.z + dz * (i + 0.5);
+    const seg = new THREE.Mesh(roadGeo, dirt);
+    seg.rotation.x = -Math.PI / 2;
+    seg.rotation.z = Math.atan2(dx, dz);
+    seg.position.set(cx, terrainHeight(cx, cz) + 0.45, cz);
+    seg.receiveShadow = true;
+    scene.add(seg);
+  }
+  const wallMats = [0xf0e6d2, 0xe8d8b8, 0xdcc7a0].map((h) => new THREE.MeshLambertMaterial({ color: h }));
+  const roofMat = new THREE.MeshLambertMaterial({ color: 0xa2543a });
+  const spots = [
+    [1180, -1380, 0.4], [1265, -1315, -0.3], [1150, -1470, 0.9], [1300, -1420, 0.1],
+    [1210, -1560, -0.6], [1090, -1330, 0.2], [1350, -1500, 0.7], [1240, -1230, -0.9],
+    [330, 830, 0.3], [395, 760, -0.4],
+  ];
+  for (const [hx, hz, rot] of spots) {
+    const house = new THREE.Group();
+    const w = 16 + hash(hx, hz) * 8, d = 12 + hash(hz, hx) * 6, hgt = 7 + hash(hx, 3) * 3;
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, hgt, d), wallMats[Math.floor(hash(hx, 9) * 3) % 3]);
+    body.position.y = hgt / 2;
+    body.castShadow = true; body.receiveShadow = true;
+    house.add(body);
+    const roof = new THREE.Mesh(new THREE.CylinderGeometry(d * 0.72, d * 0.72, w + 2, 3, 1), roofMat);
+    roof.rotation.z = Math.PI / 2; roof.rotation.y = Math.PI / 2;
+    roof.scale.set(1, 1, 0.5);
+    roof.position.y = hgt + d * 0.16;
+    roof.castShadow = true;
+    house.add(roof);
+    house.position.set(hx, terrainHeight(hx, hz), hz);
+    house.rotation.y = rot;
+    scene.add(house);
+  }
+}
+
 function buildTrees(scene) {
   const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 5, 5);
   const crownGeo = new THREE.ConeGeometry(4.2, 13, 6);
   const trunkMat = new THREE.MeshLambertMaterial({ color: 0x6b4a2f });
   const crownMat = new THREE.MeshLambertMaterial({ color: 0x2f6034 });
-  const count = 420;
+  const count = 680;
   const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, count);
   const crowns = new THREE.InstancedMesh(crownGeo, crownMat, count);
   const m = new THREE.Matrix4();
@@ -236,12 +364,14 @@ function buildTrees(scene) {
     placed++;
   }
   trunks.count = crowns.count = placed;
+  crowns.castShadow = true;
   scene.add(trunks, crowns);
 }
 
 function buildClouds(scene) {
   // Unlit white material: clouds read as bright vapour, not grey rock.
-  const mat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
+  cloudMat = new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.88 });
+  const mat = cloudMat;
   const group = new THREE.Group();
   for (let i = 0; i < 26; i++) {
     const cloud = new THREE.Group();

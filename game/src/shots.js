@@ -4,11 +4,12 @@
 // scene — the first ring ahead on climb-out, a banked turn in the valley,
 // the lake run, a landing flare — and freezes the simulation so a headless
 // browser captures exactly the frame the judge will see.
+import * as THREE from 'three';
 import { SORTIES } from './missions.js';
 import { poseAircraft } from './aircraft.js';
 
 export function poseForShot(name, ctx) {
-  const { flight, aircraft, camera, camPos, startSortie, getCourse, traffic } = ctx;
+  const { flight, aircraft, camera, camPos, startSortie, getCourse, traffic, setAtmosphere } = ctx;
   const sortieIndex = name === 'valley' ? 1 : name === 'storm' ? 2 : 0;
   startSortie(sortieIndex);
   const sortie = SORTIES[sortieIndex];
@@ -41,14 +42,34 @@ export function poseForShot(name, ctx) {
   const controls = { pitch: 0.25, roll: 0, rudder: 0 };
 
   switch (name) {
-    case 'takeoff': {
-      // Climbing out over the strip: the runway's far half fills the lower
-      // frame and the first amber ring hangs ahead over the valley.
-      setFlight({ x: 0, y: 34, z: 950 }, 0, 0.14, 0, 34, 1);
+    case 'cover': {
+      // Golden-hour climb-out over the home strip: runway, hangar and
+      // tower below, the fields, dirt road and village spreading east,
+      // the first amber ring ahead and the rim peaks on the horizon —
+      // the whole game in one frame.
+      setAtmosphere('golden');
+      setFlight({ x: 0, y: 42, z: 1150 }, 0, 0.13, 0.06, 36, 1);
       flight.onGround = false;
       controls.pitch = 0.5;
       poseAircraft(aircraft, flight, controls, 0.016, 1);
-      chaseCam(18, 7.5, 70, 12);
+      traffic.poseAt(230, 95, 480, -1.1, 0.12);
+      chaseCam(16, 6, 80, 3);
+      break;
+    }
+    case 'cockpit': {
+      // From the pilot's seat on final: lit gauges, canopy frame, the
+      // strip running out ahead past the nose.
+      course.setProgress(sortie.rings().length);
+      setFlight({ x: 5, y: 30, z: 1830 }, 0, -0.02, 0.02, 30, 0.32, -1.6);
+      flight.onGround = false;
+      controls.pitch = 0.3;
+      poseAircraft(aircraft, flight, controls, 0.016, 1);
+      aircraft.group.updateMatrixWorld();
+      const head = aircraft.group.localToWorld(new THREE.Vector3(0, 1.32, -1.85));
+      const aim = aircraft.group.localToWorld(new THREE.Vector3(0, -25, -80));
+      camera.position.copy(head);
+      camPos.copy(head);
+      camera.lookAt(aim);
       break;
     }
     case 'valley': {
@@ -80,28 +101,30 @@ export function poseForShot(name, ctx) {
       break;
     }
     case 'storm': {
-      // On the lake ring's own axis: water dead ahead, the amber gate
-      // centred over it, hills rising beyond.
+      // On the lake ring's own axis, closer in: water dead ahead, the
+      // amber gate centred over it, the village shore off the left wing
+      // and storm cloud overhead.
       course.setProgress(2);
       const ringDef = sortie.rings()[2];
       const fwdX = Math.sin(ringDef.heading), fwdZ = -Math.cos(ringDef.heading);
       setFlight(
-        { x: ringDef.x - fwdX * 430, y: ringDef.y + 30, z: ringDef.z - fwdZ * 430 },
-        ringDef.heading, 0.02, 0.16, 62, 0.8,
+        { x: ringDef.x - fwdX * 300, y: ringDef.y - 6, z: ringDef.z - fwdZ * 300 },
+        ringDef.heading, 0.02, 0.3, 62, 0.8,
       );
       poseAircraft(aircraft, flight, controls, 0.016, 1);
-      chaseCam(17, 6);
+      chaseCam(16, 5.4);
       break;
     }
     case 'landing': {
-      // Course complete, on final: gear down, gentle sink, the strip
-      // running out ahead past the nose.
+      // Course complete, on final at golden hour: gear down, gentle
+      // sink, long shadows on the strip running out ahead.
+      setAtmosphere('golden');
       course.setProgress(sortie.rings().length);
       setFlight({ x: 6, y: 30, z: 1790 }, 0, 0.05, 0.02, 29, 0.3, -1.7);
       flight.onGround = false;
       controls.pitch = 0.35;
       poseAircraft(aircraft, flight, controls, 0.016, 1);
-      chaseCam(17, 5.5, 120, 6);
+      chaseCam(15.5, 4.8, 120, 6);
       break;
     }
     default:

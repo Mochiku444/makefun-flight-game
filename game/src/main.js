@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { Input } from './input.js';
 import { FlightModel } from './flight.js';
-import { buildWorld, groundAt, WORLD } from './world.js';
+import { buildWorld, groundAt, WORLD, applyAtmosphere, followSky } from './world.js';
 import { buildAircraft, poseAircraft } from './aircraft.js';
 import { RingCourse } from './rings.js';
 import { SORTIES, SPAWN, scoreSortie } from './missions.js';
@@ -17,10 +17,21 @@ import { poseForShot } from './shots.js';
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(58, 1, 0.5, 9000);
 
-buildWorld(scene);
+const { sun } = buildWorld(scene);
+// The shadow camera rides along with the aircraft: the light keeps its
+// bearing but re-centres on the plane, so shadows stay crisp anywhere.
+const SUN_OFF = new THREE.Vector3(-1400, 2100, -900).normalize().multiplyScalar(1500);
+const SUN_OFF_LOW = new THREE.Vector3(-2600, 640, -1400).normalize().multiplyScalar(1500);
+function followSun(low) {
+  const off = low ? SUN_OFF_LOW : SUN_OFF;
+  sun.position.set(flight.pos.x + off.x, flight.pos.y + off.y, flight.pos.z + off.z);
+  sun.target.position.set(flight.pos.x, flight.pos.y, flight.pos.z);
+}
 const aircraft = buildAircraft();
 scene.add(aircraft.group);
 const traffic = new Traffic(scene);
@@ -54,6 +65,7 @@ SORTIES.forEach((s, i) => {
 
 function startSortie(index) {
   sortie = SORTIES[index];
+  applyAtmosphere(scene, sortie.id === 'storm-freight' ? 'storm' : 'day');
   if (course) course.dispose(scene);
   course = new RingCourse(scene, sortie.rings());
   flight.reset(SPAWN);
@@ -224,13 +236,21 @@ function updateCamera(dt) {
   const p = flight.pos;
   const sinH = Math.sin(flight.heading), cosH = Math.cos(flight.heading);
   if (cameraMode === 'cockpit') {
-    const fx = sinH * Math.cos(flight.pitch), fz = -cosH * Math.cos(flight.pitch);
-    camera.position.set(p.x, p.y + 3.4, p.z);
-    camera.lookAt(p.x + fx * 100, p.y + 3.4 + Math.sin(flight.pitch) * 100, p.z + fz * 100);
-    camera.rotateZ(-flight.roll);
-    aircraft.group.visible = false;
+    // From the pilot's seat: the lit panel and canopy frame are part of
+    // the aircraft, so the camera rides the airframe's own transform.
+    aircraft.group.visible = true;
+    aircraft.cockpit.visible = true;
+    aircraft.canopy.visible = false;
+    aircraft.group.updateMatrixWorld();
+    const head = aircraft.group.localToWorld(new THREE.Vector3(0, 1.25, -2.0));
+    const aim = aircraft.group.localToWorld(new THREE.Vector3(0, -6, -80));
+    camera.position.copy(head);
+    camPos.copy(head);
+    camera.lookAt(aim);
     return;
   }
+  aircraft.cockpit.visible = false;
+  aircraft.canopy.visible = true;
   aircraft.group.visible = true;
   if (cameraMode === 'orbit' || state === 'title') {
     const t = elapsed * 0.11;
@@ -270,9 +290,19 @@ resize();
 if (shotMode) {
   titleScreen.classList.add('hidden');
   hud.show();
-  const shot = poseForShot(shotMode, { flight, aircraft, camera, camPos, startSortie, getCourse: () => course, traffic });
+  const shot = poseForShot(shotMode, {
+    flight, aircraft, camera, camPos, startSortie,
+    getCourse: () => course, traffic,
+    setAtmosphere: (kind) => applyAtmosphere(scene, kind),
+  });
   if (shot) {
     state = 'flying';
+    if (shotMode === 'cockpit') {
+      aircraft.cockpit.visible = true;
+      aircraft.canopy.visible = false;
+    }
+    followSun(shotMode === 'cover' || shotMode === 'landing');
+    followSky(camera);
     course.refreshColours(1);
     hud.update(0.016, flight, sortie, course, run); // fill the instruments once
     hud.messageEl.style.opacity = '0'; // no briefing banner across the photo
@@ -298,6 +328,8 @@ function frame(now) {
   if (state === 'flying') {
     stepFlying(dt, controls);
   }
+  followSun(false);
+  followSky(camera);
   if (state !== 'title') {
     poseAircraft(aircraft, flight, controls, dt, elapsed);
     traffic.update(dt, elapsed);
