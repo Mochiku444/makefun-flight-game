@@ -1,6 +1,6 @@
 // Keyboard and mouse input for Summit Air.
 // Keys: W/S or arrows pitch, A/D bank, Shift/Ctrl throttle, Space brake,
-// G gear, C camera, M mute, R restart, Esc menu, 1-3 pick a sortie, Enter confirm.
+// G gear, C camera, M mute, R restart, Esc menu, 1-5 pick a sortie, Enter confirm.
 // Mouse: moving it steers gently toward the pointer; clicking the title cards picks a sortie.
 export class Input {
   constructor() {
@@ -36,6 +36,8 @@ export class Input {
       case 'Digit1': return 'sortie1';
       case 'Digit2': return 'sortie2';
       case 'Digit3': return 'sortie3';
+      case 'Digit4': return 'sortie4';
+      case 'Digit5': return 'sortie5';
       default: return null;
     }
   }

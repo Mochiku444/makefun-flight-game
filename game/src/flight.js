@@ -32,6 +32,7 @@ export class FlightModel {
     this.onGround = true;
     this.crashed = false;
     this.stalled = false;
+    this.touchdownVy = null; // m/s sink at the last runway touchdown
   }
 
   // Advance one step. input: {pitch, roll, throttleDelta, brake, rudder}.
@@ -102,6 +103,7 @@ export class FlightModel {
       if (!ground.onRunway || hardHit) {
         this.crashed = true;
       } else {
+        this.touchdownVy = vy; // kept for the debrief's touchdown grade
         this.onGround = true;
         this.verticalSpeed = 0;
         if (this.pitch < 0) this.pitch = 0;

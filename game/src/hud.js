@@ -17,6 +17,7 @@ export class Hud {
     this.objSub = document.getElementById('obj-sub');
     this.arrow = document.getElementById('ring-arrow');
     this.messageEl = document.getElementById('message');
+    this.atcEl = document.getElementById('atc');
     this.horizon = document.getElementById('horizon').getContext('2d');
     this.messageTimer = 0;
   }
@@ -52,6 +53,7 @@ export class Hud {
     this.thr.style.width = `${flight.throttle * 100}%`;
 
     this.objTitle.textContent = sortie.name;
+    this.updateRadio(flight, sortie, course, state);
     const guide = course.guidance(flight);
     if (flight.crashed) {
       this.objText.textContent = 'Aircraft down';
@@ -78,6 +80,23 @@ export class Hud {
     }
 
     this.drawHorizon(flight);
+  }
+
+  // The tower's side of the sortie, on a strip under the screen: a takeoff
+  // clearance while the course is live, a landing clearance once every ring
+  // is home. Sorties may carry their own lines (weather, dusk) in missions.js.
+  updateRadio(flight, sortie, course, state) {
+    let line;
+    if (flight.crashed) {
+      line = 'Kestrel Tower — Summit 1, do you copy?';
+    } else if (course.done) {
+      line = state.landed
+        ? 'Kestrel Tower — Summit 1, welcome home'
+        : sortie.atcLand || 'Kestrel Tower — Summit 1, cleared to land';
+    } else {
+      line = sortie.atcStart || 'Kestrel Tower — Summit 1, wind calm, cleared for takeoff';
+    }
+    if (this.atcEl.textContent !== line) this.atcEl.textContent = line;
   }
 
   drawHorizon(flight) {

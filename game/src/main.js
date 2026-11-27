@@ -65,7 +65,7 @@ SORTIES.forEach((s, i) => {
 
 function startSortie(index) {
   sortie = SORTIES[index];
-  applyAtmosphere(scene, sortie.id === 'storm-freight' ? 'storm' : 'day');
+  applyAtmosphere(scene, sortie.atmo || 'day');
   if (course) course.dispose(scene);
   course = new RingCourse(scene, sortie.rings());
   flight.reset(SPAWN);
@@ -91,6 +91,15 @@ function startSortie(index) {
   sound.ensure();
 }
 
+// The debrief's verdict on the arrival itself: sink at the moment the gear
+// met the runway, graded the way instructors grade it.
+function touchdownGrade(vy) {
+  if (vy == null) return null;
+  const sinkFpm = Math.round((Math.abs(vy) * 196.85) / 10) * 10;
+  const grade = Math.abs(vy) <= 1.6 ? 'SMOOTH' : Math.abs(vy) <= 3.2 ? 'FIRM' : 'HARD';
+  return `${grade} — ${sinkFpm} fpm sink`;
+}
+
 function endSortie(crashed) {
   state = 'debrief';
   const result = {
@@ -111,8 +120,10 @@ function endSortie(crashed) {
     ['Time', `${Math.round(result.timeSec)} s — bonus ${score.timeBonus} pts`],
     ['Fuel left', `${Math.round(result.fuelLeft * 100)}% — ${score.fuelBonus} pts`],
     ['Hull', `${Math.round(result.hull * 100)}% — penalty ${score.hullPenalty} pts`],
-    ['TOTAL', `${score.total} pts`],
   ];
+  const grade = crashed ? null : touchdownGrade(flight.touchdownVy);
+  if (grade) rows.push(['Touchdown', grade]);
+  rows.push(['TOTAL', `${score.total} pts`]);
   document.getElementById('debrief-rows').innerHTML = rows
     .map(([k, v]) => `<div><span class="row-label">${k}</span>${v}</div>`)
     .join('');
@@ -135,8 +146,9 @@ function backToTitle() {
 
 input.onAction = (action) => {
   sound.ensure();
-  if (action === 'sortie1' || action === 'sortie2' || action === 'sortie3') {
-    if (state === 'title') startSortie(Number(action.slice(-1)) - 1);
+  if (action.startsWith('sortie')) {
+    const index = Number(action.slice(-1)) - 1;
+    if (state === 'title' && SORTIES[index]) startSortie(index);
   } else if (action === 'confirm') {
     if (state === 'debrief') startSortie(SORTIES.indexOf(sortie));
   } else if (action === 'menu') {
@@ -196,7 +208,9 @@ function stepFlying(dt, controls) {
     run.streakBest = Math.max(run.streakBest, run.streak);
     run.streakBonus += 30 * (run.streak - 1);
     sound.ringCleared();
-    if (course.done) hud.message('Final ring!', 1.6);
+    if (sortie.dropAt != null && course.clearedCount - 1 === sortie.dropAt) {
+      hud.message('Parcel away — the village waves back', 2.2);
+    } else if (course.done) hud.message('Final ring!', 1.6);
     else if (run.streak >= 2) hud.message(`STREAK ×${run.streak} — +${30 * (run.streak - 1)} pts`, 1.6);
     else hud.message(`Ring ${course.clearedCount} cleared`, 1.6);
   }
@@ -294,6 +308,8 @@ if (shotMode) {
     flight, aircraft, camera, camPos, startSortie,
     getCourse: () => course, traffic,
     setAtmosphere: (kind) => applyAtmosphere(scene, kind),
+    getRun: () => run,
+    finishSortie: (crashed) => endSortie(crashed),
   });
   if (shot) {
     state = 'flying';
@@ -301,7 +317,7 @@ if (shotMode) {
       aircraft.cockpit.visible = true;
       aircraft.canopy.visible = false;
     }
-    followSun(shotMode === 'cover' || shotMode === 'landing');
+    followSun(shotMode === 'cover' || shotMode === 'landing' || shotMode === 'debrief');
     followSky(camera);
     course.refreshColours(1);
     hud.update(0.016, flight, sortie, course, run); // fill the instruments once

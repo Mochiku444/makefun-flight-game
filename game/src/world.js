@@ -10,6 +10,10 @@ export const WORLD = {
   spawn: { x: 0, z: 1440, heading: 0 }, // south end of the runway, facing north
 };
 
+// Kestrel Light: the lighthouse on the lake's south-east shore, the valley's
+// signature landmark — courses and briefings navigate by it.
+export const LIGHTHOUSE = { x: 1990, z: -1420 };
+
 // --- deterministic value noise -------------------------------------------
 function hash(ix, iz) {
   let h = (ix * 374761393 + iz * 668265263) | 0;
@@ -165,6 +169,7 @@ export function buildWorld(scene) {
   buildRunway(scene);
   buildAirfield(scene);
   buildLake(scene);
+  buildLighthouse(scene);
   buildRoadAndVillage(scene);
   buildTrees(scene);
   buildClouds(scene);
@@ -295,6 +300,76 @@ function buildLake(scene) {
   lake.rotation.x = -Math.PI / 2;
   lake.position.set(1650, 2.2, -1750);
   scene.add(lake);
+}
+
+// Kestrel Light: a banded lighthouse on the lake's south-east shore. Four
+// stacked drums alternate white and signal red; a gallery and lamp room cap
+// the tower, and a warm glow sprite hangs at the lamp so the light reads
+// from across the valley, day or dusk.
+function buildLighthouse(scene) {
+  const { x, z } = LIGHTHOUSE;
+  const base = terrainHeight(x, z);
+  const tower = new THREE.Group();
+  const white = new THREE.MeshLambertMaterial({ color: 0xf2ede2 });
+  const red = new THREE.MeshLambertMaterial({ color: 0xc23a2e });
+  const dark = new THREE.MeshLambertMaterial({ color: 0x2e3438 });
+
+  const plinth = new THREE.Mesh(new THREE.CylinderGeometry(10, 12, 3, 12), dark);
+  plinth.position.y = 1.5;
+  plinth.castShadow = true; plinth.receiveShadow = true;
+  tower.add(plinth);
+
+  const bandH = 6.4;
+  for (let i = 0; i < 4; i++) {
+    const rBottom = 4.8 - i * 0.45, rTop = 4.8 - (i + 1) * 0.45;
+    const band = new THREE.Mesh(
+      new THREE.CylinderGeometry(rTop, rBottom, bandH, 12),
+      i % 2 === 0 ? white : red,
+    );
+    band.position.y = 3 + bandH * (i + 0.5);
+    band.castShadow = true; band.receiveShadow = true;
+    tower.add(band);
+  }
+  const towerTop = 3 + bandH * 4; // 28.6
+
+  const gallery = new THREE.Mesh(new THREE.CylinderGeometry(5.4, 5.4, 1.3, 12), dark);
+  gallery.position.y = towerTop + 0.65;
+  gallery.castShadow = true;
+  tower.add(gallery);
+
+  const lamp = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.5, 2.5, 3.6, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffd98a }),
+  );
+  lamp.position.y = towerTop + 1.3 + 1.8;
+  tower.add(lamp);
+  const lampFrame = new THREE.Mesh(new THREE.CylinderGeometry(2.9, 2.9, 0.5, 8), dark);
+  lampFrame.position.y = towerTop + 1.3 + 0.25;
+  tower.add(lampFrame);
+
+  const roof = new THREE.Mesh(new THREE.ConeGeometry(3.6, 2.8, 8), dark);
+  roof.position.y = towerTop + 1.3 + 3.6 + 1.4;
+  roof.castShadow = true;
+  tower.add(roof);
+
+  // The lamp's glow: a soft radial sprite, the same trick as the sun glow.
+  const glowTex = (() => {
+    const cv = document.createElement('canvas'); cv.width = cv.height = 128;
+    const cx = cv.getContext('2d');
+    const gr = cx.createRadialGradient(64, 64, 2, 64, 64, 64);
+    gr.addColorStop(0, 'rgba(255,224,150,0.95)');
+    gr.addColorStop(0.4, 'rgba(255,205,110,0.4)');
+    gr.addColorStop(1, 'rgba(255,205,110,0)');
+    cx.fillStyle = gr; cx.fillRect(0, 0, 128, 128);
+    const t = new THREE.CanvasTexture(cv); t.colorSpace = THREE.SRGBColorSpace; return t;
+  })();
+  const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, transparent: true, opacity: 0.9, depthWrite: false }));
+  glow.scale.setScalar(46);
+  glow.position.y = towerTop + 1.3 + 1.8;
+  tower.add(glow);
+
+  tower.position.set(x, base, z);
+  scene.add(tower);
 }
 
 // A dirt road out of the airfield and a farming village on the lake's west

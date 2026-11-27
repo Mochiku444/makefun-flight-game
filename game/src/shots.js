@@ -9,8 +9,8 @@ import { SORTIES } from './missions.js';
 import { poseAircraft } from './aircraft.js';
 
 export function poseForShot(name, ctx) {
-  const { flight, aircraft, camera, camPos, startSortie, getCourse, traffic, setAtmosphere } = ctx;
-  const sortieIndex = name === 'valley' ? 1 : name === 'storm' ? 2 : 0;
+  const { flight, aircraft, camera, camPos, startSortie, getCourse, traffic, setAtmosphere, getRun, finishSortie } = ctx;
+  const sortieIndex = name === 'valley' ? 1 : name === 'storm' ? 2 : name === 'debrief' ? 4 : 0;
   startSortie(sortieIndex);
   const sortie = SORTIES[sortieIndex];
   const course = getCourse();
@@ -101,14 +101,13 @@ export function poseForShot(name, ctx) {
       break;
     }
     case 'storm': {
-      // On the lake ring's own axis, closer in: water dead ahead, the
-      // amber gate centred over it, the village shore off the left wing
-      // and storm cloud overhead.
+      // On the lake run, swung toward the south-east shore: the amber
+      // gate rides left of the nose, Kestrel Light stands on its headland
+      // to the right, and the whole lake spreads below in the murk.
       course.setProgress(2);
       const ringDef = sortie.rings()[2];
-      const fwdX = Math.sin(ringDef.heading), fwdZ = -Math.cos(ringDef.heading);
       setFlight(
-        { x: ringDef.x - fwdX * 300, y: ringDef.y - 6, z: ringDef.z - fwdZ * 300 },
+        { x: 1381, y: ringDef.y - 6, z: -1456 },
         ringDef.heading, 0.02, 0.3, 62, 0.8,
       );
       poseAircraft(aircraft, flight, controls, 0.016, 1);
@@ -125,6 +124,30 @@ export function poseForShot(name, ctx) {
       controls.pitch = 0.35;
       poseAircraft(aircraft, flight, controls, 0.016, 1);
       chaseCam(15.5, 4.8, 120, 6);
+      break;
+    }
+    case 'debrief': {
+      // The dusk courier brought home: a fabricated completed run (all
+      // six rings, a streak, a SMOOTH touchdown) run through the game's
+      // own debrief path, the panel lifted just enough to let the dusk
+      // field and the parked plane show around its edges.
+      course.setProgress(sortie.rings().length);
+      const run = getRun();
+      run.timeSec = 262;
+      run.fuel = 0.34;
+      run.hull = 1;
+      run.streakBest = 3;
+      run.streakBonus = 90;
+      run.airborne = true;
+      flight.touchdownVy = -1.1; // 220 fpm — a SMOOTH arrival
+      setFlight({ x: 0, y: 0, z: 900 }, 0, 0, 0, 0, 0);
+      poseAircraft(aircraft, flight, { pitch: 0, roll: 0, rudder: 0 }, 0.016, 1);
+      camera.position.set(21, 7, 860);
+      camPos.copy(camera.position);
+      camera.lookAt(0, 3, 905);
+      document.getElementById('debrief').style.background =
+        'radial-gradient(ellipse at 50% 35%, rgba(20, 48, 78, 0.58), rgba(5, 12, 22, 0.8))';
+      finishSortie(false);
       break;
     }
     default:
